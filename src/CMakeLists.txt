@@ -1,5 +1,5 @@
 add_library(3DViewer 3DViewer.cpp)
-target_link_libraries(3DViewer external.sdl2 spdlog::spdlog)
+target_link_libraries(3DViewer external.sdl2 spdlog::spdlog Eigen3::Eigen)
 
 
 add_executable(main main.cpp)
