@@ -25,8 +25,13 @@ int main(int argc, char** argv){
 	spdlog::info("Input: ({}, {}) Output: ({},{},{})", (width -1)/2.0 , (height-1)/2.0, obj.x(), obj.y(), obj.z());
 
 	spdlog::info("Object to World");
-	viewer.objectToWorld(0,0,0);
-	viewer.objectToWorld(width - 1, height -1 ,0);
-	viewer.objectToWorld(static_cast<double>((width-1)/2.0), static_cast<double>((height-1)/2.0),0);
+	auto obj2 = viewer.objectToWorld(0,0,0);
+	spdlog::info("Input: ({}, {}, {}) Output: ({},{}, {})", 0, 0, 0, obj2.x(), obj2.y(), obj2.z());
+	obj2 = viewer.objectToWorld(width - 1, height -1 ,0);
+	spdlog::info("Input: ({}, {}, {}) Output: ({},{}, {})", width -1, height -1 , 0, obj2.x(), obj2.y(), obj2.z());
+	obj2 = viewer.objectToWorld(static_cast<double>((width-1)/2.0), static_cast<double>((height-1)/2.0),0);
+	spdlog::info("Input: ({}, {}, {}) Output: ({},{}, {})", (width -1)/2.0, (height -1)/2.0 , 0, obj2.x(), obj2.y(), obj2.z());
+	spdlog::info("Ray Intersection: ");
+	viewer.calculateRayIntersection(0,799);
 	return EXIT_SUCCESS;
 }

@@ -4,6 +4,7 @@
 #include <3DViewer.hpp>
 #include <spdlog/spdlog.h>
 #include <iostream>
+#include <algorithm>
 
 
 void ImageViewer::initBuffer(){
@@ -135,9 +136,11 @@ void ImageViewer::updateCamera(INTERACTION* inter, double* value){
   switch (*inter){
     case INTERACTION::TRANSLATE_HORIZONTAL:
       this->cam.position.x += *value;
+      this->sortBuffer();
       break;
     case INTERACTION::TRANSLATE_VERTICAL:
       this->cam.position.y += *value;
+      this->sortBuffer();
       break;
     case INTERACTION::SCALE_IMAGE:
       this->f *= *value;
@@ -155,7 +158,7 @@ Eigen::Vector3f ImageViewer::objectToWorld(const double u, const double v, const
   double cx = (this->max_x - this->min_x) / 2.0;
   double cy = (this->max_y - this->min_y) / 2.0;
   double cz = (this->max_z - this->min_z) / 2.0;
-  double m = -0.5 / (this->min_x - cx);
+  double m = -1.0 / (this->min_x - cx);
 
   objectToWorldMatrix(0,0) = m;
   objectToWorldMatrix(0,3) = - m * cx;
@@ -165,7 +168,7 @@ Eigen::Vector3f ImageViewer::objectToWorld(const double u, const double v, const
   objectToWorldMatrix(2,3) = - m * cz;
 
   Eigen::Vector4f worldVec = objectToWorldMatrix * objectVec;
-  spdlog::info("Input: ({}, {}, {}), Output: ({},{}, {})", u, v, w, worldVec.x(), worldVec.y(), worldVec.z());
+  // spdlog::info("Input: ({}, {}, {}), Output: ({},{}, {})", u, v, w, worldVec.x(), worldVec.y(), worldVec.z());
   
   return worldVec.block<3, 1>(0, 0);
 }
@@ -203,6 +206,61 @@ Eigen::Vector3f ImageViewer::pixelToWorld(const double u, const double v){
 
   return (cameraToWorld * imagePlaneToCamera * pixelToImagePlane * pixelVec).block<3,1>(0,0);
   }
+
+int ImageViewer::calculateRayIntersection(int px, int py){
+  Eigen::Vector3d o = this->pixelToWorld(px, py).cast<double>();
+  Eigen::Vector3d d(o.x() - this->cam.position.x, o.y() - this->cam.position.y, o.z() - this->cam.position.z);
+  d.normalize();
+
+  std::cout << "Origin: " << std::endl << o << std::endl;
+  std::cout << "Direction: " << std::endl << d << std::endl;
+
+  double eps = 0.001;
+
+  std::vector<std::pair<Vec3D, Color>> intersectors;
+
+  for(auto& pair : this->buffer){
+    Eigen::Vector3d p = this->objectToWorld(pair.first.x, pair.first.y, pair.first.z).cast<double>();
+    std::cout << p << std::endl;
+    
+    double oNormSq = o.norm() * o.norm();
+    double pNormSq = p.norm() * p.norm();
+    double dNormSq = d.norm() * d.norm();
+
+    double a = oNormSq + pNormSq - 2 * o.dot(p) - eps;
+    double b = 2 * d.dot(o) - 2 * d.dot(p);
+    double c = dNormSq;
+
+    double descriminant = b * b - 4 * a * c;
+    if(descriminant < 0){
+      continue;
+    }
+    else{
+      spdlog::info("Intersector: ({}, {}, {})", pair.first.x,  pair.first.y, pair.first.z);
+      intersectors.push_back(pair);
+    }
+  }
+
+  
+  return -1;
+}
+
+void ImageViewer::sortBuffer(){
+  const auto& cam = this->cam;
+  std::sort(buffer.begin(), buffer.end(), [&cam](const std::pair<Vec3D, Color>& a, const std::pair<Vec3D, Color>& b){
+    double a_dx = a.first.x - cam.position.x;
+    double a_dy = a.first.y - cam.position.y;
+    double a_dz = a.first.z - cam.position.z;
+    
+    double b_dx = b.first.x - cam.position.x;
+    double b_dy = b.first.y - cam.position.y;
+    double b_dz = b.first.z - cam.position.z;
+    
+    double d1  = a_dx * a_dx + a_dy * a_dy + a_dz * a_dz;
+    double d2  = b_dx * b_dx + b_dy * b_dy + b_dz * b_dz;
+    return d1 < d2;
+  });
+}
 
 void ImageViewer::updateDisplayBuffer(){
   return;

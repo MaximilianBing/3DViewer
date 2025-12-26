@@ -46,7 +46,7 @@ class ImageViewer{
     Camera cam{0,0,1,0,0,-1, 0, 1,0};
     double cx;
     double cy;
-    double f = 0.5;
+    double f = 1.0;
     double s;
 
 
@@ -98,6 +98,8 @@ class ImageViewer{
     void addToBuffer(const Vec3D pos, Color c);
     Eigen::Vector3f pixelToWorld(const double u, const double v);
     Eigen::Vector3f objectToWorld(const double u, const double v, const double w);
+
+    int calculateRayIntersection(int px, int py);
     
     private:
     void renderBuffer();
@@ -105,6 +107,7 @@ class ImageViewer{
     void updateCamera(INTERACTION* inter, double* value);
     void updateDisplayBuffer();
     void initBuffer();
+    void sortBuffer();
 
 };
 
