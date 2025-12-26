@@ -171,47 +171,37 @@ Eigen::Vector3f ImageViewer::objectToWorld(const double u, const double v, const
 }
 
 Eigen::Vector3f ImageViewer::pixelToWorld(const double u, const double v){
-  Eigen::Vector4f pixelVec(u, v, 1, 1);
+  Eigen::Vector4f pixelVec(u, v, 0, 1);
   Eigen::Matrix4f pixelToImagePlane = Eigen::Matrix4f::Identity();
   Eigen::Matrix4f imagePlaneToCamera = Eigen::Matrix4f::Identity();
   Eigen::Matrix4f cameraToWorld = Eigen::Matrix4f::Identity();
 
-  pixelToImagePlane(0,0) = this->s / this->f;
-  pixelToImagePlane(0,2) = - this->s / this->f * this->cx;
-  pixelToImagePlane(1,1) = - this->s / this->f;
-  pixelToImagePlane(1,2) = this->s / this->f * this->cy;
-  pixelToImagePlane(2,2) = 0;
-
-  Eigen::Vector4f test = pixelToImagePlane * pixelVec;
-
-  spdlog::info("Test Input: ({}, {}), Output: ({},{}, {})", u, v, test.x(), test.y(), test.z());
-
+  pixelToImagePlane(0,0) = 2 * f / (this->width - 1);
+  pixelToImagePlane(0,3) = -f;
+  pixelToImagePlane(1,1) = - 2 * f / (this->height - 1);
+  pixelToImagePlane(1,3) = f;
 
   imagePlaneToCamera(2,3) = this->f;
-  
-  // Eigen::Vector3f up(this->cam.up.x, this->cam.up.y, this->cam.up.z);
-  // Eigen::Vector3f dir(this->cam.orientation.x, this->cam.orientation.y, this->cam.orientation.z);
-  // Eigen::Vector3f right = up.cross(dir);
-  // cameraToWorld(0,0) = right.x();
-  // cameraToWorld(0,1) = right.y();
-  // cameraToWorld(0,2) = right.z();
-  cameraToWorld(0,3) = this->cam.position.x;
-  // cameraToWorld(1,0) = up.x();
-  // cameraToWorld(1,1) = up.y();
-  // cameraToWorld(1,2) = up.z();
-  cameraToWorld(1,3) = this->cam.position.y;
-  // cameraToWorld(2,0) = dir.x();
-  // cameraToWorld(2,1) = dir.y();
-  // cameraToWorld(2,2) = dir.z();
-  cameraToWorld(2,3) = -this->cam.position.z;
-  
-  // spdlog::info("Camera Position: ({}, {}, {}) Orientation: ({}, {}, {})", this->cam.position.x, this->cam.position.y, this->cam.position.z, this->cam.orientation.x, this->cam.orientation.y, this->cam.orientation.z);
 
+  Eigen::Vector3f up(this->cam.up.x, this->cam.up.y, this->cam.up.z);
+  Eigen::Vector3f dir(this->cam.orientation.x, this->cam.orientation.y, this->cam.orientation.z);
+  Eigen::Vector3f right = dir.cross(up);
+  cameraToWorld(0,0) = right.x();
+  cameraToWorld(0,1) = right.y();
+  cameraToWorld(0,2) = right.z();
+  cameraToWorld(1,1) = up.x();
+  cameraToWorld(1,1) = up.y();
+  cameraToWorld(1,2) = up.z();
+  cameraToWorld(2,0) = dir.x();
+  cameraToWorld(2,1) = dir.y();
+  cameraToWorld(2,2) = dir.z();
+  cameraToWorld(0,3) = this->cam.position.x;
+  cameraToWorld(1,3) = this->cam.position.y;
+  cameraToWorld(2,3) = this->cam.position.z;
 
   Eigen::Vector4f worldVec = cameraToWorld * imagePlaneToCamera * pixelToImagePlane * pixelVec;
-  spdlog::info("Input: ({}, {}), Output: ({},{}, {})", u, v, worldVec.x(), worldVec.y(), worldVec.z());
 
-  return worldVec.block<3,1>(0,0);
+  return (cameraToWorld * imagePlaneToCamera * pixelToImagePlane * pixelVec).block<3,1>(0,0);
   }
 
 void ImageViewer::updateDisplayBuffer(){
