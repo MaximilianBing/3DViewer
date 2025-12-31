@@ -40,8 +40,11 @@ class ImageViewer{
 
     std::string windowTitle;
     SDL_Window *p_window;
+    SDL_Renderer* p_renderer;
+    SDL_Texture* p_texture;
     SDL_Event *p_event;
     bool running = false;
+    bool cameraChanged = false;
 
     Camera cam{0,0,1,0,0,-1, 0, 1,0};
     double cx;
@@ -50,9 +53,9 @@ class ImageViewer{
     double s;
 
 
-    double vTranslate = 1.0;
-    double vScale = 0.9;
-    double vRotate = 1.0;
+    double vTranslate = 0.01;
+    double vScale = 0.01;
+    double vRotate = 0.01;
 
     double min_x, min_y, min_z;
     double max_x, max_y, max_z;
@@ -93,16 +96,20 @@ class ImageViewer{
         return Eigen::Vector3i(x,y,z);
     };
 
-    bool displayViewer();
-    bool updateBuffer();
+    bool isRunning();
+    bool init();
+    void handleEvents();
+    void update();
+    void render();
     void addToBuffer(const Vec3D pos, Color c);
+
     Eigen::Vector3f pixelToWorld(const double u, const double v);
     Eigen::Vector3f objectToWorld(const double u, const double v, const double w);
 
-    int calculateRayIntersection(int px, int py);
+    std::vector<std::pair<Vec3D, Color>> calculateRayIntersection(int px, int py);
     
     private:
-    void renderBuffer();
+    void shutdown();
     void detectInteraction(INTERACTION* inter, double* value);
     void updateCamera(INTERACTION* inter, double* value);
     void updateDisplayBuffer();
@@ -111,7 +118,7 @@ class ImageViewer{
 
 };
 
-inline void createRandomBuffer(std::vector<std::pair<Vec3D, Color>>& buffer, const size_t width, const size_t height, const Color defaultColor = {0,0,0,0}){
+inline void createRandomBuffer(std::vector<std::pair<Vec3D, Color>>& buffer, const size_t width, const size_t height){
     buffer = std::vector<std::pair<Vec3D, Color>>(width * height * 1, std::pair<Vec3D, Color>({0,0,0}, {0,0,0,0}));
     for(int idx = 0; idx < buffer.size(); idx++){
         double x_coord = idx % width;
@@ -121,5 +128,37 @@ inline void createRandomBuffer(std::vector<std::pair<Vec3D, Color>>& buffer, con
         Uint8 randB = rand() % 255;
         Color c{randR, randG, randB, 255};
         buffer[idx] = std::pair<Vec3D, Color>({x_coord, y_coord, 0}, c);
+    }
+};
+
+inline void createCircleBuffer(std::vector<std::pair<Vec3D, Color>>& buffer, const size_t width, const size_t height, int xCenter = -1, int yCenter = -1, double circleSize = -1){
+    buffer = std::vector<std::pair<Vec3D, Color>>(width * height * 1, std::pair<Vec3D, Color>({0,0,0}, {0,0,0,255}));
+    if(xCenter == -1){
+        xCenter = width / 2.0;
+    }
+    if(yCenter == -1){
+        yCenter = height / 2.0;
+    }
+    if(circleSize == -1){
+        circleSize = std::min(width, height) / 2.0;
+    }
+
+    for(int idx = 0; idx < buffer.size(); idx++){
+        double xCoord = idx % width;
+        double yCoord = idx / width;
+
+        double xDist = xCoord - xCenter;
+        double yDist = yCoord - yCenter;
+        double r = xDist * xDist + yDist * yDist;
+        Uint8 randR = 0;
+        Uint8 randG = 0;
+        Uint8 randB = 0;
+        if (std::sqrt(r) < circleSize){
+            randR = rand() % 255;
+            randG = rand() % 255;
+            randB = rand() % 255;
+        }
+        Color c{randR, randG, randB, 255};
+        buffer[idx] = std::pair<Vec3D, Color>({xCoord, yCoord, 0}, c);
     }
 };

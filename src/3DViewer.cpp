@@ -6,76 +6,104 @@
 #include <iostream>
 #include <algorithm>
 
+bool ImageViewer::init(){
+  SDL_Init(SDL_INIT_VIDEO);
+  this->p_window = SDL_CreateWindow(
+      this->windowTitle.c_str(), SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+      this->width, this->height, SDL_WINDOW_SHOWN);
+  this->p_event = new SDL_Event();
+  this->p_renderer =
+      SDL_CreateRenderer(this->p_window, -1, SDL_RENDERER_ACCELERATED);
+  this->p_texture =
+      SDL_CreateTexture(this->p_renderer, SDL_PIXELFORMAT_RGBA8888,
+                        SDL_TEXTUREACCESS_STREAMING, this->width, this->height);
+  this->initBuffer();
+  this->running = true;
+  this->cameraChanged = false;
+  return true;
+}
 
 void ImageViewer::initBuffer(){
-  for (int i = 0; i < this->buffer.size(); i++){
-    Vec3D coord = this->buffer[i].first;
-    if(coord.x > this->max_x) this->max_x = coord.x;    
-    if(coord.x < this->min_x) this->min_x = coord.x;    
-    if(coord.y > this->max_y) this->max_y = coord.y;    
-    if(coord.y < this->min_y) this->min_y = coord.y;    
-    if(coord.z > this->max_z) this->max_z = coord.z;    
-    if(coord.z < this->min_z) this->min_z = coord.z;        
+  void* pixels;
+  int pitch;
 
-    int xCoord = static_cast<int>(coord.x);
-    int yCoord = static_cast<int>(coord.y);
-    int zCoord = static_cast<int>(coord.z);
-    int idx = zCoord * this->width * this->height + yCoord * this->width + xCoord;
-    if(xCoord >= 0 && xCoord < this->width && yCoord >= 0 && yCoord < this->height){
-      Color c = this->buffer[i].second;
-      this->displayBuffer[idx] = c;
-    }
+  SDL_LockTexture(this->p_texture, nullptr, &pixels, &pitch);
+  Uint32* dst = static_cast<Uint32*>(pixels);
+  int stride = pitch / sizeof(Uint32);
+
+  std::fill(dst, dst + stride * height, 0);
+
+  SDL_PixelFormat* fmt = SDL_AllocFormat(SDL_PIXELFORMAT_RGBA8888);
+
+  for (const auto& entry : buffer) {
+    const Vec3D& pos = entry.first;
+    const SDL_Color& c = entry.second;
+
+    if(pos.x > this->max_x) this->max_x = pos.x;    
+    if(pos.x < this->min_x) this->min_x = pos.x;    
+    if(pos.y > this->max_y) this->max_y = pos.y;    
+    if(pos.y < this->min_y) this->min_y = pos.y;    
+    if(pos.z > this->max_z) this->max_z = pos.z;    
+    if(pos.z < this->min_z) this->min_z = pos.z;  
+
+    int x = static_cast<int>(pos.x);
+    int y = static_cast<int>(pos.y);
+
+    if (x < 0 || x >= width || y < 0 || y >= height)
+        continue;
+
+    Uint32 pixel = SDL_MapRGBA(fmt, c.r, c.g, c.b, c.a);
+    dst[y * stride + x] = pixel;
   }
+
+  SDL_FreeFormat(fmt);
+  SDL_UnlockTexture(this->p_texture);
 
   spdlog::info("x: min={} max={}, y: min={} max={}, z: min={} max={}", this->min_x, this->max_x, this->min_y, this->max_y, this->min_z, this->max_z);
 }
 
-bool ImageViewer::updateBuffer(){
-  this->renderBuffer();
-  return true;
+bool ImageViewer::isRunning(){
+  return this->running;
 }
 
-void ImageViewer::renderBuffer(){
-    // Setup renderer
-    SDL_Renderer* renderer = NULL;
-    renderer =  SDL_CreateRenderer( this->p_window, -1, SDL_RENDERER_ACCELERATED);
-    
-    // background color
-    // // Set render color to red ( background will be rendered in this color )
-    SDL_SetRenderDrawColor( renderer, 0, 0, 0, 255 );
-
-    // // Clear winow
-    SDL_RenderClear( renderer );
-
-    for(int idx = 0; idx < this->displayBuffer.size(); idx++){
-        SDL_Color color = this->displayBuffer[idx];
-        Eigen::Vector3i v = this->transform1Dto3D(idx);
-        SDL_Rect r;
-        r.x = v.x();
-        r.y = v.y();
-        r.w = r.h = 1;
-
-        SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
-        SDL_RenderFillRect(renderer, &r);
+void ImageViewer::handleEvents(){
+   while (SDL_PollEvent(this->p_event) && this->running) {
+    INTERACTION inter;
+    double value;
+    this->detectInteraction(&inter, &value);
+    if(inter != INTERACTION::NON_TYPE && inter != INTERACTION::QUIT){
+      this->updateCamera(&inter, &value);
+      this->cameraChanged = true;
     }
+    else if(inter == INTERACTION::QUIT){
+      this->shutdown();
+    }
+  }
+}
 
+void ImageViewer::update(){
+  if (this->cameraChanged) {
+    spdlog::info("Changing camera...");
+    updateDisplayBuffer();
+    this->cameraChanged = false;
+    spdlog::info("Camera changed");
+  }
+}
 
-    // // Creat a rect at pos ( 50, 50 ) that's 50 pixels wide and 50 pixels high.
-    // SDL_Rect r;
-    // r.x = 50;
-    // r.y = 50;
-    // r.w = 50;
-    // r.h = 50;
+void ImageViewer::render(){    
+    SDL_RenderClear(p_renderer);
+    SDL_RenderCopy(p_renderer, p_texture, nullptr, nullptr);
+    SDL_RenderPresent(p_renderer);
+}
 
-    // // Set render color to blue ( rect will be rendered in this color )
-    // SDL_SetRenderDrawColor( renderer, 0, 0, 255, 255 );
-
-    // // Render rect
-    // SDL_RenderFillRect( renderer, &r );
-
-    // Render the rect to the screen
-    SDL_RenderPresent(renderer);
-    SDL_DestroyRenderer(renderer);
+void ImageViewer::shutdown() {
+    SDL_DestroyTexture(p_texture);
+    SDL_DestroyRenderer(p_renderer);
+    SDL_DestroyWindow(p_window);
+    delete p_event;
+    SDL_Quit();
+    this->running = false;
+    this->cameraChanged = false;
 }
 
 void ImageViewer::detectInteraction(INTERACTION* inter, double* value){
@@ -136,11 +164,11 @@ void ImageViewer::updateCamera(INTERACTION* inter, double* value){
   switch (*inter){
     case INTERACTION::TRANSLATE_HORIZONTAL:
       this->cam.position.x += *value;
-      this->sortBuffer();
+      // this->sortBuffer();
       break;
     case INTERACTION::TRANSLATE_VERTICAL:
       this->cam.position.y += *value;
-      this->sortBuffer();
+      // this->sortBuffer();
       break;
     case INTERACTION::SCALE_IMAGE:
       this->f *= *value;
@@ -167,10 +195,7 @@ Eigen::Vector3f ImageViewer::objectToWorld(const double u, const double v, const
   objectToWorldMatrix(2,2) = m;
   objectToWorldMatrix(2,3) = - m * cz;
 
-  Eigen::Vector4f worldVec = objectToWorldMatrix * objectVec;
-  // spdlog::info("Input: ({}, {}, {}), Output: ({},{}, {})", u, v, w, worldVec.x(), worldVec.y(), worldVec.z());
-  
-  return worldVec.block<3, 1>(0, 0);
+  return (objectToWorldMatrix * objectVec).block<3, 1>(0, 0);
 }
 
 Eigen::Vector3f ImageViewer::pixelToWorld(const double u, const double v){
@@ -207,42 +232,30 @@ Eigen::Vector3f ImageViewer::pixelToWorld(const double u, const double v){
   return (cameraToWorld * imagePlaneToCamera * pixelToImagePlane * pixelVec).block<3,1>(0,0);
   }
 
-int ImageViewer::calculateRayIntersection(int px, int py){
+std::vector<std::pair<Vec3D, Color>> ImageViewer::calculateRayIntersection(int px, int py){
   Eigen::Vector3d o = this->pixelToWorld(px, py).cast<double>();
   Eigen::Vector3d d(o.x() - this->cam.position.x, o.y() - this->cam.position.y, o.z() - this->cam.position.z);
   d.normalize();
 
-  std::cout << "Origin: " << std::endl << o << std::endl;
-  std::cout << "Direction: " << std::endl << d << std::endl;
-
-  double eps = 0.001;
-
+  
+  double eps = 0.01;
+  
   std::vector<std::pair<Vec3D, Color>> intersectors;
-
+  
   for(auto& pair : this->buffer){
     Eigen::Vector3d p = this->objectToWorld(pair.first.x, pair.first.y, pair.first.z).cast<double>();
-    std::cout << p << std::endl;
     
-    double oNormSq = o.norm() * o.norm();
-    double pNormSq = p.norm() * p.norm();
-    double dNormSq = d.norm() * d.norm();
-
-    double a = oNormSq + pNormSq - 2 * o.dot(p) - eps;
-    double b = 2 * d.dot(o) - 2 * d.dot(p);
-    double c = dNormSq;
-
-    double descriminant = b * b - 4 * a * c;
-    if(descriminant < 0){
-      continue;
-    }
-    else{
-      spdlog::info("Intersector: ({}, {}, {})", pair.first.x,  pair.first.y, pair.first.z);
+    Eigen::Vector3d op = o - p;
+    Eigen::Vector3d po = p - o;
+    double r = (op + d.dot(po) / d.dot(d) * d).norm();
+    
+    if(r < eps){
+      // spdlog::info("Intersector: ({}, {}, {})", pair.first.x,  pair.first.y, pair.first.z);
       intersectors.push_back(pair);
     }
   }
 
-  
-  return -1;
+  return intersectors;
 }
 
 void ImageViewer::sortBuffer(){
@@ -263,35 +276,45 @@ void ImageViewer::sortBuffer(){
 }
 
 void ImageViewer::updateDisplayBuffer(){
-  return;
-}
+  void* pixels = nullptr;
+  int pitch = 0;
 
-bool ImageViewer::displayViewer(){
-  if(this->running == false){
-    this->initBuffer();
-    SDL_Init(SDL_INIT_VIDEO);
-    this->p_window = SDL_CreateWindow(this->windowTitle.c_str(), SDL_WINDOWPOS_CENTERED,
-                                  SDL_WINDOWPOS_CENTERED, this->width,
-                                  this->height, SDL_WINDOW_SHOWN);
-    this->p_event = new SDL_Event();
-    this->running = true;
-  }  
-
-  while (SDL_PollEvent(this->p_event) && this->running) {
-    INTERACTION inter;
-    double value;
-    this->detectInteraction(&inter, &value);
-    if(inter != INTERACTION::NON_TYPE && inter != INTERACTION::QUIT){
-      this->updateCamera(&inter, &value);
-      this->updateDisplayBuffer();
-    }
-    else if(inter == INTERACTION::QUIT){
-      SDL_DestroyWindow(this->p_window);
-      SDL_Quit();
-      delete this->p_event;
-      this->running = false;
-      return false;
-    }
+  if (SDL_LockTexture(p_texture, nullptr, &pixels, &pitch) != 0) {
+      return;
   }
-    return true;
+
+  Uint32* dst = static_cast<Uint32*>(pixels);
+  int stride = pitch / sizeof(Uint32);
+
+  SDL_PixelFormat* fmt = SDL_AllocFormat(SDL_PIXELFORMAT_RGBA8888);
+
+  // Clear framebuffer
+  std::fill(dst, dst + stride * height, 0);
+
+  const int pixelCount = width * height;
+
+  for (int idx = 0; idx < pixelCount; ++idx) {
+      int x = idx % width;
+      int y = idx / width;
+
+      // 1. Build ray from camera through this pixel
+      Eigen::Vector3i v = this->transform1Dto3D(idx);
+      auto intersectors = calculateRayIntersection(v.x(), v.y());
+
+      if (intersectors.size() == 0) {
+          continue; // background remains black
+      }
+
+      // 3. Write pixel
+      dst[y * stride + x] = SDL_MapRGBA(
+          fmt,
+          intersectors[0].second.r,
+          intersectors[0].second.g,
+          intersectors[0].second.b,
+          intersectors[0].second.a
+      );
+  }
+
+  SDL_FreeFormat(fmt);
+  SDL_UnlockTexture(p_texture);
 }
