@@ -35,8 +35,10 @@ class ImageViewer{
     size_t height = 500;
     size_t depth = 0;
 
-    std::vector<std::pair<Vec3D, Color>> buffer;
+    std::vector<std::pair<Vec3D, Color>> rawBuffer;
+    std::vector<std::pair<Vec3D, Color>> mappedBuffer;
     std::vector<Color> displayBuffer;
+    std::vector<double> depthBuffer;
 
     std::string windowTitle;
     SDL_Window *p_window;
@@ -68,20 +70,18 @@ class ImageViewer{
         this->s = this->f / this->width;
         this->cx = (this->width - 1) / 2.0;
         this->cy = (this->height - 1) / 2.0;
-        this->buffer.resize(width_ * height_ * depth_);
+        
+        this->rawBuffer = buffer_;
+        this->displayBuffer.resize(width_ * height_ * depth_);
+        this->depthBuffer = std::vector<double>(this->width * this->height, +INFINITY);
         this->windowTitle = windowTitle_;
 
         this->min_x = std::numeric_limits<double>::max();
-        this->max_x = -std::numeric_limits<double>::max();
+        this->max_x = - std::numeric_limits<double>::max();
         this->min_y = std::numeric_limits<double>::max();
-        this->max_y = -std::numeric_limits<double>::max();
+        this->max_y = - std::numeric_limits<double>::max();
         this->min_z = std::numeric_limits<double>::max();
-        this->max_z = -std::numeric_limits<double>::max();
-
-        if(buffer_.size() == this->buffer.size()){
-            this->buffer = buffer_;
-            this->displayBuffer = std::vector<Color>(this->width * this->height * this->depth, {0,0,0,0});
-        }
+        this->max_z = - std::numeric_limits<double>::max();
     }
 
     template<typename VectorType>
@@ -103,8 +103,9 @@ class ImageViewer{
     void render();
     void addToBuffer(const Vec3D pos, Color c);
 
-    Eigen::Vector3f pixelToWorld(const double u, const double v);
-    Eigen::Vector3f objectToWorld(const double u, const double v, const double w);
+    Eigen::Vector3d pixelToWorld(const double u, const double v);
+    Eigen::Vector3d worldToPixel(const Eigen::Vector3d v);
+    Eigen::Vector3d objectToWorld(const double u, const double v, const double w);
 
     std::vector<std::pair<Vec3D, Color>> calculateRayIntersection(int px, int py);
     
@@ -115,6 +116,13 @@ class ImageViewer{
     void updateDisplayBuffer();
     void initBuffer();
     void sortBuffer();
+
+    Eigen::Matrix4d cameraToWorld();
+    Eigen::Matrix4d worldToCamera();
+    Eigen::Matrix4d imagePlaneToCamera();
+    Eigen::Matrix4d cameraToImagePlane();
+    Eigen::Matrix4d pixelToImagePlane();
+    Eigen::Matrix4d imagePlaneToPixel();
 
 };
 

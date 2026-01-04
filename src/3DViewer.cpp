@@ -24,6 +24,20 @@ bool ImageViewer::init(){
 }
 
 void ImageViewer::initBuffer(){
+  for (const auto& entry : rawBuffer) {
+    const Vec3D& pos = entry.first;
+    const SDL_Color& c = entry.second;
+    
+    if(pos.x > this->max_x) this->max_x = pos.x;    
+    if(pos.x < this->min_x) this->min_x = pos.x;    
+    if(pos.y > this->max_y) this->max_y = pos.y;    
+    if(pos.y < this->min_y) this->min_y = pos.y;    
+    if(pos.z > this->max_z) this->max_z = pos.z;    
+    if(pos.z < this->min_z) this->min_z = pos.z;  
+  }
+  
+  spdlog::debug("x: min={} max={}, y: min={} max={}, z: min={} max={}", this->min_x, this->max_x, this->min_y, this->max_y, this->min_z, this->max_z);
+  
   void* pixels;
   int pitch;
 
@@ -31,40 +45,47 @@ void ImageViewer::initBuffer(){
   Uint32* dst = static_cast<Uint32*>(pixels);
   int stride = pitch / sizeof(Uint32);
 
+  // clear buffers
   std::fill(dst, dst + stride * height, 0);
+  this->depthBuffer = std::vector<double>(this->width * this->height, +INFINITY);
 
   SDL_PixelFormat* fmt = SDL_AllocFormat(SDL_PIXELFORMAT_RGBA8888);
 
-  for (const auto& entry : buffer) {
+  Eigen::Vector3d cameraPos(cam.position.x, cam.position.y, cam.position.z);
+
+  for (const auto& entry: rawBuffer){
     const Vec3D& pos = entry.first;
     const SDL_Color& c = entry.second;
 
-    if(pos.x > this->max_x) this->max_x = pos.x;    
-    if(pos.x < this->min_x) this->min_x = pos.x;    
-    if(pos.y > this->max_y) this->max_y = pos.y;    
-    if(pos.y < this->min_y) this->min_y = pos.y;    
-    if(pos.z > this->max_z) this->max_z = pos.z;    
-    if(pos.z < this->min_z) this->min_z = pos.z;  
+    // map raw buffer data to image plane
+    auto worldPos = this->objectToWorld(pos.x, pos.y, pos.z);
+    auto pixelPos = this->worldToPixel(worldPos);
 
-    int x = static_cast<int>(pos.x);
-    int y = static_cast<int>(pos.y);
+    this->mappedBuffer.push_back(std::pair<Vec3D, Color>(Vec3D{worldPos.cast<double>().x(), worldPos.cast<double>().y(), worldPos.cast<double>().z()}, c));
 
-    if (x < 0 || x >= width || y < 0 || y >= height)
-        continue;
+    // calculate pixel 
+    int x = static_cast<int>(pixelPos.x());
+    int y = static_cast<int>(pixelPos.y());
+    double pixelDepth = pixelPos.z();
+
+    if (x < 0 || x >= width || y < 0 || y >= height || depthBuffer[y * stride + x] < pixelDepth || pixelDepth < 0)
+      continue;
+    
+    depthBuffer[y * stride + x] = pixelDepth;
 
     Uint32 pixel = SDL_MapRGBA(fmt, c.r, c.g, c.b, c.a);
-    dst[y * stride + x] = pixel;
+    dst[y * stride + x] = pixel;   
   }
 
   SDL_FreeFormat(fmt);
   SDL_UnlockTexture(this->p_texture);
 
-  spdlog::info("x: min={} max={}, y: min={} max={}, z: min={} max={}", this->min_x, this->max_x, this->min_y, this->max_y, this->min_z, this->max_z);
 }
 
 bool ImageViewer::isRunning(){
   return this->running;
 }
+
 
 void ImageViewer::handleEvents(){
    while (SDL_PollEvent(this->p_event) && this->running) {
@@ -81,6 +102,7 @@ void ImageViewer::handleEvents(){
   }
 }
 
+
 void ImageViewer::update(){
   if (this->cameraChanged) {
     spdlog::info("Changing camera...");
@@ -90,11 +112,13 @@ void ImageViewer::update(){
   }
 }
 
+
 void ImageViewer::render(){    
     SDL_RenderClear(p_renderer);
     SDL_RenderCopy(p_renderer, p_texture, nullptr, nullptr);
     SDL_RenderPresent(p_renderer);
 }
+
 
 void ImageViewer::shutdown() {
     SDL_DestroyTexture(p_texture);
@@ -105,6 +129,7 @@ void ImageViewer::shutdown() {
     this->running = false;
     this->cameraChanged = false;
 }
+
 
 void ImageViewer::detectInteraction(INTERACTION* inter, double* value){
   *inter = INTERACTION::NON_TYPE;
@@ -160,6 +185,7 @@ void ImageViewer::detectInteraction(INTERACTION* inter, double* value){
   }
 }
 
+
 void ImageViewer::updateCamera(INTERACTION* inter, double* value){
   switch (*inter){
     case INTERACTION::TRANSLATE_HORIZONTAL:
@@ -179,9 +205,10 @@ void ImageViewer::updateCamera(INTERACTION* inter, double* value){
   spdlog::info("Camera Position: x = {}, y = {}, z = {}, focal: {}", this->cam.position.x, this->cam.position.y, this->cam.position.z, this->f);
 }
 
-Eigen::Vector3f ImageViewer::objectToWorld(const double u, const double v, const double w){
-  Eigen::Vector4f objectVec(u,v,w,1);
-  Eigen::Matrix4f objectToWorldMatrix = Eigen::Matrix4f::Identity();
+
+Eigen::Vector3d ImageViewer::objectToWorld(const double u, const double v, const double w){
+  Eigen::Vector4d objectVec(u,v,w,1);
+  Eigen::Matrix4d objectToWorldMatrix = Eigen::Matrix4d::Identity();
 
   double cx = (this->max_x - this->min_x) / 2.0;
   double cy = (this->max_y - this->min_y) / 2.0;
@@ -198,39 +225,125 @@ Eigen::Vector3f ImageViewer::objectToWorld(const double u, const double v, const
   return (objectToWorldMatrix * objectVec).block<3, 1>(0, 0);
 }
 
-Eigen::Vector3f ImageViewer::pixelToWorld(const double u, const double v){
-  Eigen::Vector4f pixelVec(u, v, 0, 1);
-  Eigen::Matrix4f pixelToImagePlane = Eigen::Matrix4f::Identity();
-  Eigen::Matrix4f imagePlaneToCamera = Eigen::Matrix4f::Identity();
-  Eigen::Matrix4f cameraToWorld = Eigen::Matrix4f::Identity();
 
-  pixelToImagePlane(0,0) = 2 * f / (this->width - 1);
-  pixelToImagePlane(0,3) = -f;
-  pixelToImagePlane(1,1) = - 2 * f / (this->height - 1);
-  pixelToImagePlane(1,3) = f;
-
-  imagePlaneToCamera(2,3) = this->f;
+Eigen::Matrix4d ImageViewer::cameraToWorld(){
+  Eigen::Matrix4d transformation = Eigen::Matrix4d::Identity();
 
   Eigen::Vector3f up(this->cam.up.x, this->cam.up.y, this->cam.up.z);
   Eigen::Vector3f dir(this->cam.orientation.x, this->cam.orientation.y, this->cam.orientation.z);
   Eigen::Vector3f right = dir.cross(up);
-  cameraToWorld(0,0) = right.x();
-  cameraToWorld(0,1) = right.y();
-  cameraToWorld(0,2) = right.z();
-  cameraToWorld(1,1) = up.x();
-  cameraToWorld(1,1) = up.y();
-  cameraToWorld(1,2) = up.z();
-  cameraToWorld(2,0) = dir.x();
-  cameraToWorld(2,1) = dir.y();
-  cameraToWorld(2,2) = dir.z();
-  cameraToWorld(0,3) = this->cam.position.x;
-  cameraToWorld(1,3) = this->cam.position.y;
-  cameraToWorld(2,3) = this->cam.position.z;
 
-  Eigen::Vector4f worldVec = cameraToWorld * imagePlaneToCamera * pixelToImagePlane * pixelVec;
+  Eigen::Vector3f pos(this->cam.position.x, this->cam.position.y, this->cam.position.z);
+
+  transformation(0,0) = right.x();
+  transformation(0,1) = right.y();
+  transformation(0,2) = right.z();
+
+  transformation(1,0) = up.x();
+  transformation(1,1) = up.y();
+  transformation(1,2) = up.z();
+
+  transformation(2,0) = dir.x();
+  transformation(2,1) = dir.y();
+  transformation(2,2) = dir.z();
+
+  transformation(0,3) = pos.x();
+  transformation(1,3) = pos.y();
+  transformation(2,3) = pos.z();
+
+  return transformation;
+}
+
+
+Eigen::Matrix4d ImageViewer::worldToCamera(){
+  Eigen::Matrix4d transformation = Eigen::Matrix4d::Identity();
+
+  Eigen::Vector3d up(this->cam.up.x, this->cam.up.y, this->cam.up.z);
+  Eigen::Vector3d dir(this->cam.orientation.x, this->cam.orientation.y, this->cam.orientation.z);
+  Eigen::Vector3d right = dir.cross(up);
+
+  Eigen::Vector3d pos(this->cam.position.x, this->cam.position.y, this->cam.position.z);
+
+  transformation(0,0) = right.x();
+  transformation(1,0) = right.y();
+  transformation(2,0) = right.z();
+
+  transformation(0,1) = up.x();
+  transformation(1,1) = up.y();
+  transformation(2,1) = up.z();
+
+  transformation(0,2) = dir.x();
+  transformation(1,2) = dir.y();
+  transformation(2,2) = dir.z();
+
+  transformation(0,3) = -right.dot(pos);
+  transformation(1,3) = -up.dot(pos);
+  transformation(2,3) = -dir.dot(pos);
+
+  return transformation;
+}
+
+
+Eigen::Matrix4d ImageViewer::imagePlaneToCamera(){
+  Eigen::Matrix4d transformation = Eigen::Matrix4d::Identity();
+  transformation(2,3) = this->f;
+  return transformation;
+}
+
+
+Eigen::Matrix4d ImageViewer::cameraToImagePlane(){
+  Eigen::Matrix4d transformation = Eigen::Matrix4d::Identity();
+  transformation(2,3) = -this->f;
+  return transformation;
+}
+
+
+Eigen::Matrix4d ImageViewer::pixelToImagePlane(){
+  Eigen::Matrix4d transformation = Eigen::Matrix4d::Identity();
+  transformation(0,0) = 2 * f / (this->width - 1);
+  transformation(0,3) = -f;
+  transformation(1,1) = - 2 * f / (this->height - 1);
+  transformation(1,3) = f;
+  return transformation;
+}
+
+
+Eigen::Matrix4d ImageViewer::imagePlaneToPixel(){
+  Eigen::Matrix4d transformation = Eigen::Matrix4d::Identity();
+
+  const double sx = 2.0 * f / (this->width  - 1);
+  const double sy = -2.0 * f / (this->height - 1);
+
+  transformation(0,0) = 1.0 / sx;
+  transformation(1,1) = 1.0 / sy;
+
+  transformation(0,3) = -(-f) / sx;
+  transformation(1,3) = -( f)  / sy;
+
+  return transformation;
+}
+
+
+Eigen::Vector3d ImageViewer::pixelToWorld(const double u, const double v){
+  Eigen::Vector4d pixelVec(u, v, 0, 1);
+  Eigen::Matrix4d pixelToImagePlane = this->pixelToImagePlane();;
+  Eigen::Matrix4d imagePlaneToCamera = this->imagePlaneToCamera();
+  Eigen::Matrix4d cameraToWorld = this->cameraToWorld();
 
   return (cameraToWorld * imagePlaneToCamera * pixelToImagePlane * pixelVec).block<3,1>(0,0);
-  }
+}
+
+// rewrite to have depth as return 
+Eigen::Vector3d ImageViewer::worldToPixel(const Eigen::Vector3d v){
+  Eigen::Vector4d worldVec(v.x(), v.y(), v.z(), 1);
+  Eigen::Matrix4d worldToCamera = this->worldToCamera();
+  Eigen::Matrix4d cameraToImagePlane = this->cameraToImagePlane();
+  Eigen::Matrix4d imagePlaneToPixel = this->imagePlaneToPixel();
+
+  Eigen::Vector4d pixVec = imagePlaneToPixel * cameraToImagePlane * worldToCamera * worldVec;
+  return pixVec.block<3,1>(0,0);
+}
+
 
 std::vector<std::pair<Vec3D, Color>> ImageViewer::calculateRayIntersection(int px, int py){
   Eigen::Vector3d o = this->pixelToWorld(px, py).cast<double>();
@@ -242,7 +355,7 @@ std::vector<std::pair<Vec3D, Color>> ImageViewer::calculateRayIntersection(int p
   
   std::vector<std::pair<Vec3D, Color>> intersectors;
   
-  for(auto& pair : this->buffer){
+  for(auto& pair : this->rawBuffer){
     Eigen::Vector3d p = this->objectToWorld(pair.first.x, pair.first.y, pair.first.z).cast<double>();
     
     Eigen::Vector3d op = o - p;
@@ -258,9 +371,10 @@ std::vector<std::pair<Vec3D, Color>> ImageViewer::calculateRayIntersection(int p
   return intersectors;
 }
 
+
 void ImageViewer::sortBuffer(){
   const auto& cam = this->cam;
-  std::sort(buffer.begin(), buffer.end(), [&cam](const std::pair<Vec3D, Color>& a, const std::pair<Vec3D, Color>& b){
+  std::sort(rawBuffer.begin(), rawBuffer.end(), [&cam](const std::pair<Vec3D, Color>& a, const std::pair<Vec3D, Color>& b){
     double a_dx = a.first.x - cam.position.x;
     double a_dy = a.first.y - cam.position.y;
     double a_dz = a.first.z - cam.position.z;
@@ -274,6 +388,7 @@ void ImageViewer::sortBuffer(){
     return d1 < d2;
   });
 }
+
 
 void ImageViewer::updateDisplayBuffer(){
   void* pixels = nullptr;
@@ -290,29 +405,25 @@ void ImageViewer::updateDisplayBuffer(){
 
   // Clear framebuffer
   std::fill(dst, dst + stride * height, 0);
+  // clear depth buffer
+  this->depthBuffer = std::vector<double>(this->width * this->height, +INFINITY);
 
   const int pixelCount = width * height;
 
-  for (int idx = 0; idx < pixelCount; ++idx) {
-      int x = idx % width;
-      int y = idx / width;
+  for (int idx = 0; idx < this->mappedBuffer.size(); idx++){
+    auto element = this->mappedBuffer[idx];
+    auto pos = this->worldToPixel(Eigen::Vector3d(element.first.x, element.first.y, element.first.z));
+    int x = static_cast<int>(pos.x());
+    int y = static_cast<int>(pos.x());
+    double pixelDepth = pos.z();
 
-      // 1. Build ray from camera through this pixel
-      Eigen::Vector3i v = this->transform1Dto3D(idx);
-      auto intersectors = calculateRayIntersection(v.x(), v.y());
+    if (x < 0 || x >= width || y < 0 || y >= height || depthBuffer[y * stride + x] < pixelDepth || pixelDepth < 0)
+      continue;
 
-      if (intersectors.size() == 0) {
-          continue; // background remains black
-      }
+    depthBuffer[y * stride + x] = pixelDepth;
 
-      // 3. Write pixel
-      dst[y * stride + x] = SDL_MapRGBA(
-          fmt,
-          intersectors[0].second.r,
-          intersectors[0].second.g,
-          intersectors[0].second.b,
-          intersectors[0].second.a
-      );
+    Uint32 pixel = SDL_MapRGBA(fmt, element.second.r, element.second.g, element.second.b, element.second.a);
+    dst[y * stride + x] = pixel; 
   }
 
   SDL_FreeFormat(fmt);
