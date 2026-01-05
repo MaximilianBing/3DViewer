@@ -52,14 +52,17 @@ void ImageViewer::initBuffer(){
   SDL_PixelFormat* fmt = SDL_AllocFormat(SDL_PIXELFORMAT_RGBA8888);
 
   Eigen::Vector3d cameraPos(cam.position.x, cam.position.y, cam.position.z);
+  Eigen::Matrix4d objectToWorld = this->objectToWorld();
+  Eigen::Matrix4d worldToPixel = this->worldToPixel();
 
   for (const auto& entry: rawBuffer){
     const Vec3D& pos = entry.first;
     const SDL_Color& c = entry.second;
 
     // map raw buffer data to image plane
-    auto worldPos = this->objectToWorld(pos.x, pos.y, pos.z);
-    auto pixelPos = this->worldToPixel(worldPos);
+    Eigen::Vector4d posVec(pos.x, pos.y, pos.z, 1.0);
+    auto worldPos = objectToWorld * posVec;
+    auto pixelPos = worldToPixel * worldPos;
 
     this->mappedBuffer.push_back(std::pair<Vec3D, Color>(Vec3D{worldPos.cast<double>().x(), worldPos.cast<double>().y(), worldPos.cast<double>().z()}, c));
 
@@ -206,8 +209,7 @@ void ImageViewer::updateCamera(INTERACTION* inter, double* value){
 }
 
 
-Eigen::Vector3d ImageViewer::objectToWorld(const double u, const double v, const double w){
-  Eigen::Vector4d objectVec(u,v,w,1);
+Eigen::Matrix4d ImageViewer::objectToWorld(){
   Eigen::Matrix4d objectToWorldMatrix = Eigen::Matrix4d::Identity();
 
   double cx = (this->max_x - this->min_x) / 2.0;
@@ -222,7 +224,7 @@ Eigen::Vector3d ImageViewer::objectToWorld(const double u, const double v, const
   objectToWorldMatrix(2,2) = m;
   objectToWorldMatrix(2,3) = - m * cz;
 
-  return (objectToWorldMatrix * objectVec).block<3, 1>(0, 0);
+  return objectToWorldMatrix;
 }
 
 
@@ -324,49 +326,44 @@ Eigen::Matrix4d ImageViewer::imagePlaneToPixel(){
 }
 
 
-Eigen::Vector3d ImageViewer::pixelToWorld(const double u, const double v){
-  Eigen::Vector4d pixelVec(u, v, 0, 1);
+Eigen::Matrix4d ImageViewer::pixelToWorld(){
   Eigen::Matrix4d pixelToImagePlane = this->pixelToImagePlane();;
   Eigen::Matrix4d imagePlaneToCamera = this->imagePlaneToCamera();
   Eigen::Matrix4d cameraToWorld = this->cameraToWorld();
-
-  return (cameraToWorld * imagePlaneToCamera * pixelToImagePlane * pixelVec).block<3,1>(0,0);
+  return cameraToWorld * imagePlaneToCamera * pixelToImagePlane;
 }
 
 // rewrite to have depth as return 
-Eigen::Vector3d ImageViewer::worldToPixel(const Eigen::Vector3d v){
-  Eigen::Vector4d worldVec(v.x(), v.y(), v.z(), 1);
+Eigen::Matrix4d ImageViewer::worldToPixel(){
   Eigen::Matrix4d worldToCamera = this->worldToCamera();
   Eigen::Matrix4d cameraToImagePlane = this->cameraToImagePlane();
   Eigen::Matrix4d imagePlaneToPixel = this->imagePlaneToPixel();
-
-  Eigen::Vector4d pixVec = imagePlaneToPixel * cameraToImagePlane * worldToCamera * worldVec;
-  return pixVec.block<3,1>(0,0);
+  return imagePlaneToPixel * cameraToImagePlane * worldToCamera;
 }
 
 
 std::vector<std::pair<Vec3D, Color>> ImageViewer::calculateRayIntersection(int px, int py){
-  Eigen::Vector3d o = this->pixelToWorld(px, py).cast<double>();
-  Eigen::Vector3d d(o.x() - this->cam.position.x, o.y() - this->cam.position.y, o.z() - this->cam.position.z);
-  d.normalize();
+  // Eigen::Vector3d o = this->pixelToWorld(px, py).cast<double>();
+  // Eigen::Vector3d d(o.x() - this->cam.position.x, o.y() - this->cam.position.y, o.z() - this->cam.position.z);
+  // d.normalize();
 
   
-  double eps = 0.01;
+  // double eps = 0.01;
   
   std::vector<std::pair<Vec3D, Color>> intersectors;
   
-  for(auto& pair : this->rawBuffer){
-    Eigen::Vector3d p = this->objectToWorld(pair.first.x, pair.first.y, pair.first.z).cast<double>();
+  // for(auto& pair : this->rawBuffer){
+  //   Eigen::Vector3d p = this->objectToWorld(pair.first.x, pair.first.y, pair.first.z).cast<double>();
     
-    Eigen::Vector3d op = o - p;
-    Eigen::Vector3d po = p - o;
-    double r = (op + d.dot(po) / d.dot(d) * d).norm();
+  //   Eigen::Vector3d op = o - p;
+  //   Eigen::Vector3d po = p - o;
+  //   double r = (op + d.dot(po) / d.dot(d) * d).norm();
     
-    if(r < eps){
-      // spdlog::info("Intersector: ({}, {}, {})", pair.first.x,  pair.first.y, pair.first.z);
-      intersectors.push_back(pair);
-    }
-  }
+  //   if(r < eps){
+  //     // spdlog::info("Intersector: ({}, {}, {})", pair.first.x,  pair.first.y, pair.first.z);
+  //     intersectors.push_back(pair);
+  //   }
+  // }
 
   return intersectors;
 }
@@ -409,12 +406,14 @@ void ImageViewer::updateDisplayBuffer(){
   this->depthBuffer = std::vector<double>(this->width * this->height, +INFINITY);
 
   const int pixelCount = width * height;
+  Eigen::Matrix4d worldToPixel = this->worldToPixel();
 
   for (int idx = 0; idx < this->mappedBuffer.size(); idx++){
     auto element = this->mappedBuffer[idx];
-    auto pos = this->worldToPixel(Eigen::Vector3d(element.first.x, element.first.y, element.first.z));
+    auto posVec = Eigen::Vector4d(element.first.x, element.first.y, element.first.z, 1);
+    auto pos = worldToPixel * posVec;
     int x = static_cast<int>(pos.x());
-    int y = static_cast<int>(pos.x());
+    int y = static_cast<int>(pos.y());
     double pixelDepth = pos.z();
 
     if (x < 0 || x >= width || y < 0 || y >= height || depthBuffer[y * stride + x] < pixelDepth || pixelDepth < 0)
