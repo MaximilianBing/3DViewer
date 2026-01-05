@@ -126,20 +126,18 @@ class ImageViewer{
 };
 
 inline void createRandomBuffer(std::vector<std::pair<Vec3D, Color>>& buffer, const size_t width, const size_t height){
-    buffer = std::vector<std::pair<Vec3D, Color>>(width * height * 1, std::pair<Vec3D, Color>({0,0,0}, {0,0,0,0}));
-    for(int idx = 0; idx < buffer.size(); idx++){
+    for(int idx = 0; idx < (width * height); idx++){
         double x_coord = idx % width;
         double y_coord = idx / width;
         Uint8 randR = rand() % 255;
         Uint8 randG = rand() % 255;
         Uint8 randB = rand() % 255;
         Color c{randR, randG, randB, 255};
-        buffer[idx] = std::pair<Vec3D, Color>({x_coord, y_coord, 0}, c);
+        buffer.push_back(std::pair<Vec3D, Color>({x_coord, y_coord, 0}, c));
     }
 };
 
 inline void createCircleBuffer(std::vector<std::pair<Vec3D, Color>>& buffer, const size_t width, const size_t height, int xCenter = -1, int yCenter = -1, double circleSize = -1){
-    buffer = std::vector<std::pair<Vec3D, Color>>(width * height * 1, std::pair<Vec3D, Color>({0,0,0}, {0,0,0,255}));
     if(xCenter == -1){
         xCenter = width / 2.0;
     }
@@ -150,7 +148,7 @@ inline void createCircleBuffer(std::vector<std::pair<Vec3D, Color>>& buffer, con
         circleSize = std::min(width, height) / 2.0;
     }
 
-    for(int idx = 0; idx < buffer.size(); idx++){
+    for(int idx = 0; idx < (width * height); idx++){
         double xCoord = idx % width;
         double yCoord = idx / width;
 
@@ -164,8 +162,35 @@ inline void createCircleBuffer(std::vector<std::pair<Vec3D, Color>>& buffer, con
             randR = rand() % 255;
             randG = rand() % 255;
             randB = rand() % 255;
+            buffer.push_back(std::pair<Vec3D, Color>({xCoord, yCoord, 0}, Color{randR, randG, randB, 255}));
         }
-        Color c{randR, randG, randB, 255};
-        buffer[idx] = std::pair<Vec3D, Color>({xCoord, yCoord, 0}, c);
     }
 };
+
+inline void createSimpleBuffer(std::vector<std::pair<Vec3D, Color>>& buffer, const size_t width, const size_t height){
+    double d_height = static_cast<double>(height);
+    double d_width = static_cast<double>(width);
+    std::pair<Vec3D, Color> test1, test2, test3, test4, test5;
+	test1.first = Vec3D{d_width/2.0, d_height/ 2.0, 0};
+	test1.second = Color{0, 255, 0, 255};
+
+	test2.first = Vec3D{d_width, d_height, 0};
+	test2.second = Color{255, 0, 255, 255};
+
+	test3.first = Vec3D{0, 0, 0};
+	test3.second = Color{0, 0, 255, 255};
+
+	test4.first = Vec3D{d_width, 0, 0};
+	test4.second = Color{255, 0, 0, 255};
+
+    test5.first = Vec3D{};
+    test5.second = Color{};
+
+    buffer.push_back(test1);
+    buffer.push_back(test2);
+    buffer.push_back(test3);
+    buffer.push_back(test4);
+    buffer.push_back(test5);
+    	// std::vector<std::pair<Vec3D, Color>> buffer = {test1, test2, test3, test4, test5};//(width * height * 1, std::pair<Vec3D, Color>({0,0,0}, {0,0,0,0}));
+
+}
