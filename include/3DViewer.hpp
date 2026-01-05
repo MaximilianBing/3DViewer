@@ -155,13 +155,11 @@ inline void createCircleBuffer(std::vector<std::pair<Vec3D, Color>>& buffer, con
         double xDist = xCoord - xCenter;
         double yDist = yCoord - yCenter;
         double r = xDist * xDist + yDist * yDist;
-        Uint8 randR = 0;
-        Uint8 randG = 0;
-        Uint8 randB = 0;
+
         if (std::sqrt(r) < circleSize){
-            randR = rand() % 255;
-            randG = rand() % 255;
-            randB = rand() % 255;
+            Uint8 randR = rand() % 255;
+            Uint8 randG = rand() % 255;
+            Uint8 randB = rand() % 255;
             buffer.push_back(std::pair<Vec3D, Color>({xCoord, yCoord, 0}, Color{randR, randG, randB, 255}));
         }
     }

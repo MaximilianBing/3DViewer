@@ -159,6 +159,21 @@ void ImageViewer::detectInteraction(INTERACTION* inter, double* value){
         *inter = INTERACTION::QUIT;
         *value = -1;
         break;
+      case SDLK_0:
+        *inter = INTERACTION::ROTATE_HORIZONTAL;
+        *value = vRotate;
+        break;
+      case SDLK_9:
+        *inter = INTERACTION::ROTATE_HORIZONTAL;
+        *value = -vRotate;
+      case SDLK_8:
+        *inter = INTERACTION::ROTATE_VERTICAL;
+        *value = vRotate;
+        break;
+      case SDLK_7:
+        *inter = INTERACTION::ROTATE_VERTICAL;
+        *value = -vRotate;
+        break;
       default:
         break;
     }
@@ -197,6 +212,16 @@ void ImageViewer::updateCamera(INTERACTION* inter, double* value){
       break;
     case INTERACTION::TRANSLATE_VERTICAL:
       this->cam.position.y += *value;
+      // this->sortBuffer();
+      break;
+    case INTERACTION::ROTATE_HORIZONTAL:
+    // change camera direction
+      // this->cam.position.y += *value;
+      // this->sortBuffer();
+      break;
+    case INTERACTION::ROTATE_VERTICAL:
+    // change camera direction
+      // this->cam.position.y += *value;
       // this->sortBuffer();
       break;
     case INTERACTION::SCALE_IMAGE:

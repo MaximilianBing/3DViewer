@@ -12,7 +12,7 @@ int main(int argc, char** argv){
 
 	std::vector<std::pair<Vec3D, Color>> buffer;
 
-	createCircleBuffer(buffer, width, height);
+	createRandomBuffer(buffer, width, height);
 	ImageViewer viewer(width, height, 1, buffer, "Testing Phase");
 	viewer.init();
 
