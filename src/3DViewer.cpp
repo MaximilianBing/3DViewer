@@ -108,10 +108,8 @@ void ImageViewer::handleEvents(){
 
 void ImageViewer::update(){
   if (this->cameraChanged) {
-    spdlog::info("Changing camera...");
     updateDisplayBuffer();
     this->cameraChanged = false;
-    spdlog::info("Camera changed");
   }
 }
 
@@ -166,6 +164,7 @@ void ImageViewer::detectInteraction(INTERACTION* inter, double* value){
       case SDLK_9:
         *inter = INTERACTION::ROTATE_HORIZONTAL;
         *value = -vRotate;
+        break;
       case SDLK_8:
         *inter = INTERACTION::ROTATE_VERTICAL;
         *value = vRotate;
@@ -206,27 +205,44 @@ void ImageViewer::detectInteraction(INTERACTION* inter, double* value){
 
 void ImageViewer::updateCamera(INTERACTION* inter, double* value){
   switch (*inter){
-    case INTERACTION::TRANSLATE_HORIZONTAL:
+    case INTERACTION::TRANSLATE_HORIZONTAL:{
       this->cam.position.x += *value;
-      // this->sortBuffer();
       break;
-    case INTERACTION::TRANSLATE_VERTICAL:
+    }
+    case INTERACTION::TRANSLATE_VERTICAL:{
       this->cam.position.y += *value;
-      // this->sortBuffer();
       break;
-    case INTERACTION::ROTATE_HORIZONTAL:
-    // change camera direction
-      // this->cam.position.y += *value;
-      // this->sortBuffer();
+    }
+    case INTERACTION::ROTATE_HORIZONTAL:{
+      Eigen::Vector3d camDirection(this->cam.orientation.x, this->cam.orientation.y, this->cam.orientation.z);
+      Eigen::Matrix3d rotationHorizontal = Eigen::Matrix3d::Identity();
+      rotationHorizontal(0, 0) = std::cos(*value);
+      rotationHorizontal(0, 2) = std::sin(*value);
+      rotationHorizontal(2, 0) = - std::sin(*value);
+      rotationHorizontal(2, 2) = std::cos(*value);
+      Eigen::Vector3d rotated = rotationHorizontal * camDirection;
+      this->cam.orientation.x = rotated.x();
+      this->cam.orientation.y = rotated.y();
+      this->cam.orientation.z = rotated.z();
       break;
-    case INTERACTION::ROTATE_VERTICAL:
-    // change camera direction
-      // this->cam.position.y += *value;
-      // this->sortBuffer();
+    }
+    case INTERACTION::ROTATE_VERTICAL:{
+      Eigen::Vector3d camUp(this->cam.up.x, this->cam.up.y, this->cam.up.z);
+      Eigen::Matrix3d rotationVertical = Eigen::Matrix3d::Identity();
+      rotationVertical(0, 0) = std::cos(*value);
+      rotationVertical(0, 1) = - std::sin(*value);
+      rotationVertical(1, 0) = std::sin(*value);
+      rotationVertical(1, 1) = std::cos(*value);
+      Eigen::Vector3d rotated = rotationVertical * camUp;
+      this->cam.up.x = rotated.x();
+      this->cam.up.y = rotated.y();
+      this->cam.up.z = rotated.z();
       break;
-    case INTERACTION::SCALE_IMAGE:
+    }
+    case INTERACTION::SCALE_IMAGE:{
       this->f *= *value;
       break;
+    }
     default:
       break;
   }

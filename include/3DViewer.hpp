@@ -56,7 +56,7 @@ class ImageViewer{
 
 
     double vTranslate = 0.01;
-    double vScale = 0.01;
+    double vScale = 0.99;
     double vRotate = 0.01;
 
     double min_x, min_y, min_z;
@@ -181,14 +181,37 @@ inline void createSimpleBuffer(std::vector<std::pair<Vec3D, Color>>& buffer, con
 	test4.first = Vec3D{d_width, 0, 0};
 	test4.second = Color{255, 0, 0, 255};
 
-    test5.first = Vec3D{};
-    test5.second = Color{};
+    test5.first = Vec3D{0, d_height, 0};
+    test5.second = Color{0, 255, 0, 255};
 
     buffer.push_back(test1);
     buffer.push_back(test2);
     buffer.push_back(test3);
     buffer.push_back(test4);
     buffer.push_back(test5);
-    	// std::vector<std::pair<Vec3D, Color>> buffer = {test1, test2, test3, test4, test5};//(width * height * 1, std::pair<Vec3D, Color>({0,0,0}, {0,0,0,0}));
+}
 
+// bug detected when creating an image with points not at the width and height borders
+inline void createDepthBufferExample(std::vector<std::pair<Vec3D, Color>>& buffer, const size_t width, const size_t height){
+    double d_height = static_cast<double>(height);
+    double d_width = static_cast<double>(width);
+
+    double margin = 0.25;
+
+    Color cFront{255, 0, 0, 255};
+    Color cBack{0, 255, 0, 255};
+
+    for(int idx = 0; idx < (width * height); idx++){
+        double xCoord = idx % width;
+        double yCoord = idx / width;
+        double zBack = -1.0;
+        double zFront = 0.0;
+
+        Vec3D pFront{xCoord, yCoord, zFront};
+        Vec3D pBack{xCoord, yCoord, zBack};
+
+        if(xCoord < 0.75 * d_width || yCoord < 0.75 * d_height)
+            buffer.push_back(std::pair<Vec3D,Color>(pFront, cFront));
+        buffer.push_back(std::pair<Vec3D,Color>(pBack, cBack));
+    }
 }
