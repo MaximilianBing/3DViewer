@@ -104,8 +104,11 @@ class ImageViewer{
     void addToBuffer(const Vec3D pos, Color c);
 
     Eigen::Matrix4d pixelToWorld();
+    Eigen::Vector3d pixelToWorld(const Eigen::Vector2d& point);
     Eigen::Matrix4d worldToPixel();
+    Eigen::Vector3d worldToPixel(const Eigen::Vector3d& point);
     Eigen::Matrix4d objectToWorld();
+    Eigen::Vector3d objectToWorld(const Eigen::Vector3d& point);
 
     std::vector<std::pair<Vec3D, Color>> calculateRayIntersection(int px, int py);
     
@@ -118,11 +121,17 @@ class ImageViewer{
     void sortBuffer();
 
     Eigen::Matrix4d cameraToWorld();
+    Eigen::Vector3d cameraToWorld(const Eigen::Vector3d& point);
     Eigen::Matrix4d worldToCamera();
+    Eigen::Vector3d worldToCamera(const Eigen::Vector3d& point);
     Eigen::Matrix4d imagePlaneToCamera();
+    Eigen::Vector3d imagePlaneToCamera(const Eigen::Vector3d& point);
     Eigen::Matrix4d cameraToImagePlane();
+    Eigen::Vector3d cameraToImagePlane(const Eigen::Vector3d& point);
     Eigen::Matrix4d pixelToImagePlane();
+    Eigen::Vector3d pixelToImagePlane(const Eigen::Vector3d& point);
     Eigen::Matrix4d imagePlaneToPixel();
+    Eigen::Vector3d imagePlaneToPixel(const Eigen::Vector3d& point);
 };
 
 inline void createRandomBuffer(std::vector<std::pair<Vec3D, Color>>& buffer, const size_t width, const size_t height){

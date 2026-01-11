@@ -269,6 +269,22 @@ Eigen::Matrix4d ImageViewer::objectToWorld(){
 }
 
 
+Eigen::Vector3d ImageViewer::objectToWorld(const Eigen::Vector3d& point){
+  Eigen::Vector3d transformed;
+
+  double cx = (this->max_x - this->min_x) / 2.0;
+  double cy = (this->max_y - this->min_y) / 2.0;
+  double cz = (this->max_z - this->min_z) / 2.0;
+  double m = -1.0 / (this->min_x - cx);
+
+  transformed(0) = point.x() * m - m * cx;
+  transformed(1) = point.y() * m - m * cy;
+  transformed(2) = point.z() * m - m * cz;
+
+  return transformed;
+}
+
+
 Eigen::Matrix4d ImageViewer::cameraToWorld(){
   Eigen::Matrix4d transformation = Eigen::Matrix4d::Identity();
 
@@ -295,6 +311,35 @@ Eigen::Matrix4d ImageViewer::cameraToWorld(){
   transformation(2,3) = pos.z();
 
   return transformation;
+}
+
+
+Eigen::Vector3d ImageViewer::cameraToWorld(const Eigen::Vector3d& point){
+  Eigen::Vector3d transformed;
+  Eigen::Matrix3d rotation;
+  Eigen::Vector3f up(this->cam.up.x, this->cam.up.y, this->cam.up.z);
+  Eigen::Vector3f dir(this->cam.orientation.x, this->cam.orientation.y, this->cam.orientation.z);
+  Eigen::Vector3f right = dir.cross(up);
+
+  Eigen::Vector3f pos(this->cam.position.x, this->cam.position.y, this->cam.position.z);
+  rotation(0,0) = right.x();
+  rotation(0,1) = right.y();
+  rotation(0,2) = right.z();
+
+  rotation(1,0) = up.x();
+  rotation(1,1) = up.y();
+  rotation(1,2) = up.z();
+
+  rotation(2,0) = dir.x();
+  rotation(2,1) = dir.y();
+  rotation(2,2) = dir.z();
+
+  transformed = rotation * point;
+  transformed(0) += pos.x();
+  transformed(1) += pos.y();
+  transformed(2) += pos.z();
+
+  return transformed;
 }
 
 
@@ -327,10 +372,46 @@ Eigen::Matrix4d ImageViewer::worldToCamera(){
 }
 
 
+Eigen::Vector3d ImageViewer::worldToCamera(const Eigen::Vector3d& point){
+  Eigen::Vector3d transformed;
+  Eigen::Matrix3d rotation;
+  Eigen::Vector3f up(this->cam.up.x, this->cam.up.y, this->cam.up.z);
+  Eigen::Vector3f dir(this->cam.orientation.x, this->cam.orientation.y, this->cam.orientation.z);
+  Eigen::Vector3f right = dir.cross(up);
+
+  Eigen::Vector3f pos(this->cam.position.x, this->cam.position.y, this->cam.position.z);
+  rotation(0,0) = right.x();
+  rotation(1,0) = right.y();
+  rotation(2,0) = right.z();
+
+  rotation(0,1) = up.x();
+  rotation(1,1) = up.y();
+  rotation(2,1) = up.z();
+
+  rotation(0,2) = dir.x();
+  rotation(1,2) = dir.y();
+  rotation(2,2) = dir.z();
+
+  transformed = rotation * point;
+  transformed(0) -= right.dot(pos);
+  transformed(1) -= up.dot(pos);
+  transformed(2) -= dir.dot(pos);
+
+  return transformed;
+}
+
+
 Eigen::Matrix4d ImageViewer::imagePlaneToCamera(){
   Eigen::Matrix4d transformation = Eigen::Matrix4d::Identity();
   transformation(2,3) = this->f;
   return transformation;
+}
+
+
+Eigen::Vector3d ImageViewer::imagePlaneToCamera(const Eigen::Vector3d& point){
+  Eigen::Vector3d transformed = point;
+  transformed(2) = this->f * point.z();
+  return transformed;
 }
 
 
@@ -341,6 +422,13 @@ Eigen::Matrix4d ImageViewer::cameraToImagePlane(){
 }
 
 
+Eigen::Vector3d ImageViewer::cameraToImagePlane(const Eigen::Vector3d& point){
+  Eigen::Vector3d transformed = point;
+  transformed(2) = -this->f * point.z();
+  return transformed;
+}
+
+
 Eigen::Matrix4d ImageViewer::pixelToImagePlane(){
   Eigen::Matrix4d transformation = Eigen::Matrix4d::Identity();
   transformation(0,0) = 2 * f / (this->width - 1);
@@ -348,6 +436,14 @@ Eigen::Matrix4d ImageViewer::pixelToImagePlane(){
   transformation(1,1) = - 2 * f / (this->height - 1);
   transformation(1,3) = f;
   return transformation;
+}
+
+
+Eigen::Vector3d ImageViewer::pixelToImagePlane(const Eigen::Vector3d& point){
+  Eigen::Vector3d transformed = point;
+  transformed(0) = 2 * f / (this->width - 1) * point.x() - f;
+  transformed(1) = - 2 * f / (this->height - 1) * point.y() + f;
+  return transformed;
 }
 
 
@@ -367,6 +463,19 @@ Eigen::Matrix4d ImageViewer::imagePlaneToPixel(){
 }
 
 
+Eigen::Vector3d ImageViewer::imagePlaneToPixel(const Eigen::Vector3d& point){
+  Eigen::Vector3d transformed = point;
+
+  const double sx = 2.0 * f / (this->width  - 1);
+  const double sy = -2.0 * f / (this->height - 1);
+
+  transformed(0) = 1.0 / sx * point.x() - (-f) / sx;
+  transformed(1) = 1.0 / sy * point.y() - f / sy;
+
+  return transformed;
+}
+
+
 Eigen::Matrix4d ImageViewer::pixelToWorld(){
   Eigen::Matrix4d pixelToImagePlane = this->pixelToImagePlane();;
   Eigen::Matrix4d imagePlaneToCamera = this->imagePlaneToCamera();
@@ -374,12 +483,31 @@ Eigen::Matrix4d ImageViewer::pixelToWorld(){
   return cameraToWorld * imagePlaneToCamera * pixelToImagePlane;
 }
 
+
+Eigen::Vector3d ImageViewer::pixelToWorld(const Eigen::Vector2d& point){
+  Eigen::Vector3d pixelPoint(point.x(), point.y(), 0);
+  Eigen::Vector3d imagePlanePoint = this->pixelToImagePlane(pixelPoint);
+  Eigen::Vector3d cameraPoint = this->imagePlaneToCamera(imagePlanePoint);
+  Eigen::Vector3d worldPoint = this->cameraToWorld(cameraPoint);
+  return worldPoint;
+}
+
+
 // rewrite to have depth as return 
 Eigen::Matrix4d ImageViewer::worldToPixel(){
   Eigen::Matrix4d worldToCamera = this->worldToCamera();
   Eigen::Matrix4d cameraToImagePlane = this->cameraToImagePlane();
   Eigen::Matrix4d imagePlaneToPixel = this->imagePlaneToPixel();
   return imagePlaneToPixel * cameraToImagePlane * worldToCamera;
+}
+
+
+Eigen::Vector3d ImageViewer::worldToPixel(const Eigen::Vector3d& point){
+  Eigen::Vector3d worldPoint = point;
+  Eigen::Vector3d cameraPoint = this->worldToCamera(point);
+  Eigen::Vector3d imagePlanePoint = this->cameraToImagePlane(cameraPoint);
+  Eigen::Vector3d pixelPoint = this->imagePlaneToPixel(imagePlanePoint);
+  return pixelPoint;
 }
 
 
@@ -451,8 +579,14 @@ void ImageViewer::updateDisplayBuffer(){
 
   for (int idx = 0; idx < this->mappedBuffer.size(); idx++){
     auto element = this->mappedBuffer[idx];
-    auto posVec = Eigen::Vector4d(element.first.x, element.first.y, element.first.z, 1);
-    auto pos = worldToPixel * posVec;
+    Eigen::Vector4d posVec = Eigen::Vector4d(element.first.x, element.first.y, element.first.z, 1);
+    Eigen::Vector4d pos = worldToPixel * posVec;
+    Eigen::Vector3d pos_ = this->worldToPixel(posVec.block<3,1>(0,0));
+    if(std::abs(pos.x() - pos_.x()) > 1e-5 && std::abs(pos.y() - pos_.y()) > 1e-5 && std::abs(pos.z() - pos_.z()) > 1e-5){
+      std::cout << "===========" << std::endl;
+      std::cout << pos << std::endl << pos_ << std::endl;
+      std::cout << "===========" << std::endl;
+    }
     int x = static_cast<int>(pos.x());
     int y = static_cast<int>(pos.y());
     double pixelDepth = pos.z();
